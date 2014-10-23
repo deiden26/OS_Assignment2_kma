@@ -37,6 +37,7 @@
 /************System include***********************************************/
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 /************Private include**********************************************/
 #include "kma_page.h"
@@ -48,7 +49,6 @@
  *  variables should be in all lower case. When initializing
  *  structures and arrays, line everything up in neat columns.
  */
-
 
 kma_page_t* firstPageListPage = NULL;
 
@@ -67,6 +67,11 @@ typedef struct
 	void* nextNode;
 	kma_page_t*  myPage; //Pointer to the page object that points to this node's page
 } freeListNode;
+
+//Returns the first node in the page list
+#define PAGELIST (pageListNode*)((void*)firstPageListPage->ptr + 4)
+//Returns the first node in the free list
+#define FREELIST (freeListNode*)((*((kma_page_t**)firstPageListPage->ptr))->ptr)
 
 /************Global Variables*********************************************/
 
@@ -94,7 +99,7 @@ void* kma_malloc(kma_size_t size)
 		//Clear bitMap
 		memset(&firstPageNode->bitMap[0], 0, sizeof(firstPageNode->bitMap));
 		//Set next node to null (there aren't any other nodes yet)
-		firstPageNode->nextNode = NULL
+		firstPageNode->nextNode = NULL;
 		//Store pointer to node page's page object
 		firstPageNode->myPage = firstPageListPage;
 
