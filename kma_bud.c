@@ -49,6 +49,25 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+
+kma_page_t* firstPageListPage = NULL;
+
+typedef struct
+{
+	char bitMap[512]; //Bit map to track allocated vs free data in data pages
+	void* nextNode; //Pointer to next page List Node
+	kma_page_t* dataPage; //Pointer to page object that points to a data page
+	kma_page_t*  myPage; //Pointer to page object that points to the page this node is stored on
+} pageListNode;
+
+typedef struct
+{
+	void* buffLocation;
+	int buffSize;
+	void* nextNode;
+	kma_page_t*  myPage; //Pointer to the page object that points to this node's page
+} freeListNode;
+
 /************Global Variables*********************************************/
 
 /************Function Prototypes******************************************/
@@ -57,14 +76,47 @@
 
 /**************Implementation***********************************************/
 
-void*
-kma_malloc(kma_size_t size)
+void* kma_malloc(kma_size_t size)
 {
+	//If there are no pages yet
+	if (firstPageListPage == NULL)
+	{
+		//Allocate a page list page (pointed to by firstPageListPage)
+		firstPageListPage = get_page();
+		//Allocate a free list page (first entry in page list) and
+		//put a pointer to it at the head of the first page list page
+		*((kma_page_t**)firstPageListPage->ptr) = get_page();
+
+		//Create a node for the first data page
+		pageListNode* firstPageNode = (pageListNode*)((void*)firstPageListPage->ptr + 4);
+		//Allocate a data page (second entry in page list)
+		firstPageNode->dataPage = get_page();
+		//Clear bitMap
+		memset(&firstPageNode->bitMap[0], 0, sizeof(firstPageNode->bitMap));
+		//Set next node to null (there aren't any other nodes yet)
+		firstPageNode->nextNode = NULL
+		//Store pointer to node page's page object
+		firstPageNode->myPage = firstPageListPage;
+
+		//Get pointer to the head of the free list
+		void* freeListHead = (*((kma_page_t**)firstPageListPage->ptr))->ptr;
+		//Make first free list node for the entire first data page
+		freeListNode* firstFreeNode = (freeListNode*)freeListHead;
+		//Fill in pointer to the available buffer
+		firstFreeNode->buffLocation = (firstPageNode->dataPage)->ptr;
+		//Fill in the size of the available buffer
+		firstFreeNode->buffSize = 8192;
+		//Make next node null (there aren't any other nodes yet)
+		firstFreeNode->nextNode = NULL;
+		//Store pointer to node page's page object
+		firstFreeNode->myPage = *((kma_page_t**)firstPageListPage->ptr);
+	}
+
+
   return NULL;
 }
 
-void 
-kma_free(void* ptr, kma_size_t size)
+void kma_free(void* ptr, kma_size_t size)
 {
   ;
 }
