@@ -48,7 +48,7 @@ all: ${PROGS} competition
 
 competition:
 	echo "Using ${COMPETITION} for competition"
-	${CC} ${CFLAGS} -DCOMPETITION -D${COMPETITION} -o kma_competition ${SRCS}
+	${CC} ${CFLAGS} -DCOMPETITION -D${COMPETITION} -o kma_competition ${SRCS} -lm
 
 competitionAlgorithm:
 	echo ${COMPETITION}
@@ -72,29 +72,29 @@ test-vm:
 	ssh -i id_aqualab -p 3022 aqualab@localhost 'bash -s' < vm_test.sh
 
 handin: clean
-	${TAR} ${TEAM}-${VERSION}-${PROJ}.tar ${DELIVERY}
+	${TAR} ${TEAM}-${VERSION}-${PROJ}.tar ${DELIVERY} -lm
 	${COMPRESS} ${TEAM}-${VERSION}-${PROJ}.tar
 
 .o:
-	${CC} *.c
+	${CC} *.c -lm
 
 kma_dummy: ${SRCS}
-	${CC} ${CFLAGS} -DKMA_DUMMY -o $@ ${SRCS}
+	${CC} ${CFLAGS} -DKMA_DUMMY -o $@ ${SRCS} -lm
 
 kma_rm: ${SRCS}
-	${CC} ${CFLAGS} -DKMA_RM -o $@ ${SRCS}
+	${CC} ${CFLAGS} -DKMA_RM -o $@ ${SRCS} -lm
 
 kma_p2fl: ${SRCS}
-	${CC} ${CFLAGS} -DKMA_P2FL -o $@ ${SRCS}
+	${CC} ${CFLAGS} -DKMA_P2FL -o $@ ${SRCS} -lm
 
 kma_mck2: ${SRCS}
-	${CC} ${CFLAGS} -DKMA_MCK2 -o $@ ${SRCS}
+	${CC} ${CFLAGS} -DKMA_MCK2 -o $@ ${SRCS} -lm
 
 kma_bud: ${SRCS}
-	${CC} ${CFLAGS} -DKMA_BUD -o $@ ${SRCS}
+	${CC} ${CFLAGS} -DKMA_BUD -o $@ ${SRCS} -lm
 
 kma_lzbud: ${SRCS}
-	${CC} ${CFLAGS} -DKMA_LZBUD -o $@ ${SRCS}
+	${CC} ${CFLAGS} -DKMA_LZBUD -o $@ ${SRCS} -lm
 
 leak: $(TARGET)
 	for exec in ${PROGS}; do \

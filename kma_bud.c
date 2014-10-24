@@ -275,11 +275,26 @@ void getNewDataPage()
 
 void getNewPageListPage()
 {
+	//Get a new page of memory
+	kma_page_t* newPageListPage = get_page();
+
+	//Fill page list page with empty page nodes and make the empty page node list
+	//point to the first new empty page node of the new page
+	EMPTY_PAGE_NODE_LIST = fillWithEmptyPageNodes(newPageListPage, 0);
+
+	return;
 }
 
 void getNewFreeListPage()
 {
+	//Get a new page of memory
+	kma_page_t* newFreeListPage = get_page();
 
+	//Fill page list page with empty free nodes and make the empty free node list
+	//point to the first new empty free node of the new page
+	EMPTY_FREE_NODE_LIST = fillWithEmptyFreeNodes(newFreeListPage, 0);
+
+	return;
 }
 
 #endif // KMA_BUD
