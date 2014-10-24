@@ -43,6 +43,7 @@
 /************Private include**********************************************/
 #include "kma_page.h"
 #include "kma.h"
+#include <stdio.h>
 
 /************Defines and Typedefs*****************************************/
 /*  #defines and typedefs should have their names in all caps.
@@ -69,14 +70,14 @@ typedef struct
 } freeListNode;
 
 //Returns pointer to the first node in the filled page list
-#define FILLED_PAGE_NODE_LIST (*(pageListNode**)((void*)firstPageListPage->ptr + 4))
+#define FILLED_PAGE_NODE_LIST (*(pageListNode**)((void*)firstPageListPage->ptr + sizeof(int*)))
 //Returns pointer to the first node in the empty page node list
-#define EMPTY_PAGE_NODE_LIST (*(pageListNode**)((void*)firstPageListPage->ptr + 8))
+#define EMPTY_PAGE_NODE_LIST (*(pageListNode**)((void*)firstPageListPage->ptr + sizeof(int*)*2))
 
 //Returns pointer to the first node in the empty free node list
-#define EMPTY_FREE_NODE_LIST (*(freeListNode**)((*(kma_page_t**)firstPageListPage->ptr)->ptr + 40))
+#define EMPTY_FREE_NODE_LIST (*(freeListNode**)((*(kma_page_t**)firstPageListPage->ptr)->ptr + sizeof(int*)*10))
 //Returns pointer to the first node in the free node list of buffSize size
-#define FILLED_FREE_NODE_LIST(size) (*(freeListNode**)((*(kma_page_t**)firstPageListPage->ptr)->ptr + ((int)floor(log((double)size)/log(2.0)) - 4)*4))
+#define FILLED_FREE_NODE_LIST(size) (*(freeListNode**)((*(kma_page_t**)firstPageListPage->ptr)->ptr + ((int)floor(log((double)size)/log(2.0)) - 4)*sizeof(int*)))
 
 //Returns node count int of the page you passed in
 #define NODE_COUNT(page) (*(int*)((void*)page->ptr + page->size - sizeof(int)))
@@ -104,7 +105,6 @@ void* kma_malloc(kma_size_t size)
 		initialize();
 	}
 
-
   return NULL;
 }
 
@@ -125,7 +125,7 @@ void initialize()
 	//Fill page list page with empty page nodes leaving room for the pointers to
 	//the free list page, the first filled node, and the first empty node. Also,
 	//fill the pointer to the first empty page node
-	EMPTY_PAGE_NODE_LIST = fillWithEmptyPageNodes(firstPageListPage, 12);
+	EMPTY_PAGE_NODE_LIST = fillWithEmptyPageNodes(firstPageListPage, 3*sizeof(int*));
 
 	//Create pointer to first filled page node and set equal to NULL
 	FILLED_PAGE_NODE_LIST = NULL;
@@ -142,11 +142,12 @@ void initialize()
 	//Fill free list page with empty free nodes leaving room for the pointers to
 	//the first filled nodes of different buff sizes and the first empty node. Also,
 	//fill the pointer to the first empty page node
-	EMPTY_FREE_NODE_LIST = fillWithEmptyFreeNodes(freeListPage, 44);
+	EMPTY_FREE_NODE_LIST = fillWithEmptyFreeNodes(freeListPage, 11*sizeof(int*));
 
 	int size;
 	//Set pointers to first filled free nodes of all different lists equal to NULL
-	for (int i = 4; i < 14; i++)
+	int i;
+	for (i = 4; i < 14; i++)
 	{
 		//1 << i == 2^i
 		size = 1 << i;
@@ -158,7 +159,8 @@ void initialize()
 	//##################################//
 
 	//Create first data page and fill a node for it
-	getNewDataPage();	
+	getNewDataPage();
+
 }
 
 pageListNode* fillWithEmptyPageNodes(kma_page_t* pageListPage, int offsetFromHead)
@@ -240,7 +242,8 @@ void getNewDataPage()
 	//Allocate new data page
 	newPageNode->dataPage = get_page();
 	//Clear bitMap
-	for(int i = 0; i < 256; i++)
+	int i;
+	for (i = 0; i < 256; i++)
 	{
 		newPageNode->bitMap[i] = '\0';
 	}
@@ -272,7 +275,6 @@ void getNewDataPage()
 
 void getNewPageListPage()
 {
-
 }
 
 void getNewFreeListPage()
