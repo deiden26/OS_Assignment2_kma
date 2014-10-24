@@ -56,7 +56,7 @@ kma_page_t* firstPageListPage = NULL;
 
 typedef struct
 {
-	char bitMap[512]; //Bit map to track allocated vs free data in data pages
+	char bitMap[64]; //Bit map to track allocated vs free data in data pages (64 bytes = 512bits, 512*16 = 8192)
 	void* nextNode; //Pointer to next page List Node
 	kma_page_t* dataPage; //Pointer to page object that points to a data page
 	kma_page_t*  myPage; //Pointer to page object that points to the page this node is stored on
@@ -99,6 +99,7 @@ freeListNode* divideBuffer(freeListNode* node, kma_size_t size);
 void addFreeListNode(void* buffLocation, kma_size_t buffSize);
 void removeFreeListNode(freeListNode* node);
 void removeFreeListPage(kma_page_t* pageToDelete);
+void updateBitMap(freeListNode* freeNode);
 	
 /************External Declaration*****************************************/
 
@@ -124,6 +125,9 @@ void* kma_malloc(kma_size_t size)
 
 	//Get the address of the buffer to return
 	void* buff = freeNode->buffLocation;
+
+	//Update the bitmap of buff's page to reflect allocation of buff
+	updateBitMap(freeNode);
 
 	//Remove the freeNode from the free node list (it's now allocated)
 	removeFreeListNode(freeNode);
@@ -266,7 +270,7 @@ void getNewDataPage()
 	newPageNode->dataPage = get_page();
 	//Clear bitMap
 	int i;
-	for (i = 0; i < 256; i++)
+	for (i = 0; i < 64; i++)
 	{
 		newPageNode->bitMap[i] = '\0';
 	}
@@ -457,6 +461,32 @@ void removeFreeListPage(kma_page_t* pageToDelete)
 
 	//Free the input page
 	free_page(pageToDelete);
+
+	return;
+}
+
+void updateBitMap(freeListNode* freeNode)
+{
+	//Get the first node of the page list
+	pageListNode* pageNode = FILLED_PAGE_NODE_LIST;
+
+	//Find the page node that corresponds to the data page that buff is in
+	while(freeNode->buffLocation >= pageNode->dataPage->ptr && freeNode->buffLocation < pageNode->dataPage->ptr)
+	{
+		pageNode = pageNode->nextNode;
+	}
+
+	//Update the bitmap to reflect all newly allocated buffers
+	int i;
+	int startLocation = (freeNode->buffLocation - pageNode->dataPage->ptr)/16; //Starting bit in bitmap
+	int byte; //Used to get the correct byte in bitmap given a bit
+	int bit; //Used to get the correct bit within the byte
+	for (i = startLocation; i < (startLocation+freeNode->buffSize/16); i++)
+	{
+		byte = i/8; //Used tp access correct byte in bitmap
+		bit = i%8; //Used to set correct bit in byte
+		pageNode->bitMap[byte] |= 0x01 << bit; // set bit by or-ing byte sized portion of the bitmap with a mask
+	}
 
 	return;
 }
