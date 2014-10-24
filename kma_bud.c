@@ -70,6 +70,9 @@ typedef struct
 	kma_page_t*  myPage; //Pointer to the page object that points to this node's page
 } freeListNode;
 
+//Returns pointer to the first free list page kma_page_t object
+#define FIRST_FREE_LIST_PAGE (*(kma_page_t**)firstPageListPage->ptr)
+
 //Returns pointer to the first node in the filled page list
 #define FILLED_PAGE_NODE_LIST (*(pageListNode**)((void*)firstPageListPage->ptr + sizeof(int*)))
 //Returns pointer to the first node in the empty page node list
@@ -94,14 +97,21 @@ void getNewDataPage();
 void getNewPageListPage();
 void getNewFreeListPage();
 int pow2roundup (int x);
-freeListNode* getFreeNode(kma_size_t size);
+freeListNode* getBestFitFreeNode(kma_size_t size);
 freeListNode* divideBuffer(freeListNode* node, kma_size_t size);
 void addFreeListNode(void* buffLocation, kma_size_t buffSize);
 void removeFreeListNode(freeListNode* node);
 void removeFreeListPage(kma_page_t* pageToDelete);
-void updateBitMap(freeListNode* freeNode);
+void updateBitMap(freeListNode* freeNode, pageListNode* pageNode, bool set);
+pageListNode* getPageNode(freeListNode* freeNode);
+bool isBuffInPage(freeListNode* freeNode, pageListNode* pageNode);
+bool isDataPageEmpty(pageListNode* pageNode);
+void removeDataPage(pageListNode* pageToDelete);
+void removePageListPage(kma_page_t* pageToDelete);
+void coalesce(freeListNode* freeNode);
 	
 /************External Declaration*****************************************/
+
 
 /**************Implementation***********************************************/
 
@@ -114,20 +124,23 @@ void* kma_malloc(kma_size_t size)
 	}
 
 	//Ignore requests for 0 or fewer bytes of memory
-	if (size <= 0)
+	if (size <= 0 || size > 8192)
 		return NULL;
 
 	//Get a freeListNode containing the closest fitting buffer size available
-	freeListNode* freeNode = getFreeNode(size);
+	freeListNode* freeNode = getBestFitFreeNode(size);
 
 	//Divide the buffer until it is at its minimal size that still fits the request
 	freeNode = divideBuffer(freeNode, size);
 
-	//Get the address of the buffer to return
-	void* buff = freeNode->buffLocation;
+	//Get the page node associated with the free node
+	pageListNode* pageNode =  getPageNode(freeNode);
 
 	//Update the bitmap of buff's page to reflect allocation of buff
-	updateBitMap(freeNode);
+	updateBitMap(freeNode, pageNode, 1);
+
+	//Get the address of the buffer to return
+	void* buff = freeNode->buffLocation;
 
 	//Remove the freeNode from the free node list (it's now allocated)
 	removeFreeListNode(freeNode);
@@ -137,7 +150,28 @@ void* kma_malloc(kma_size_t size)
 
 void kma_free(void* ptr, kma_size_t size)
 {
-  ;
+	//Create free node for newly freed block of memory
+	addFreeListNode(ptr, size);
+
+	//Get pointer to newly created free node
+	freeListNode* newFreeNode = FILLED_FREE_NODE_LIST(size);
+
+	//Get the page node associated with the free node
+	pageListNode* pageNode =  getPageNode(newFreeNode);
+
+	//Update bitmap to reflect newly freed block of memory
+	updateBitMap(newFreeNode, pageNode, 0);
+
+	//If there is more than one data page and bitmap of current page is completely free
+	if (FILLED_PAGE_NODE_LIST->nextNode != NULL && isDataPageEmpty(pageNode))
+		//Remove the current data page and update the page list page
+		removeDataPage(pageNode);
+
+	//Otherwise, Coalesce the buffs of the page
+	else
+		coalesce(newFreeNode, pageNode);
+	
+	return;
 }
 
 void initialize()
@@ -320,7 +354,7 @@ int pow2roundup (int x)
     return (x+1 < 16) ? 16 : x + 1;
 }
 
-freeListNode* getFreeNode(kma_size_t size)
+freeListNode* getBestFitFreeNode(kma_size_t size)
 {
 	//Round up size to a power of 2
 	size = pow2roundup(size);
@@ -422,8 +456,8 @@ void removeFreeListNode(freeListNode* nodeToDelete)
 
 	NODE_COUNT(leadNode->myPage) = NODE_COUNT(leadNode->myPage) - 1;
 
-	//If the page that leadNode is on no longer has any filled nodes
-	if (NODE_COUNT(leadNode->myPage) == 0)
+	//If the page that leadNode is on no longer has any filled nodes and isn't the first free list page
+	if (NODE_COUNT(leadNode->myPage) == 0 && leadNode->myPage != FIRST_FREE_LIST_PAGE)
 		removeFreeListPage(leadNode->myPage);
 
 	return;
@@ -465,30 +499,213 @@ void removeFreeListPage(kma_page_t* pageToDelete)
 	return;
 }
 
-void updateBitMap(freeListNode* freeNode)
+void updateBitMap(freeListNode* freeNode, pageListNode* pageNode, bool set)
 {
-	//Get the first node of the page list
-	pageListNode* pageNode = FILLED_PAGE_NODE_LIST;
-
-	//Find the page node that corresponds to the data page that buff is in
-	while(freeNode->buffLocation >= pageNode->dataPage->ptr && freeNode->buffLocation < pageNode->dataPage->ptr)
-	{
-		pageNode = pageNode->nextNode;
-	}
-
 	//Update the bitmap to reflect all newly allocated buffers
 	int i;
 	int startLocation = (freeNode->buffLocation - pageNode->dataPage->ptr)/16; //Starting bit in bitmap
 	int byte; //Used to get the correct byte in bitmap given a bit
 	int bit; //Used to get the correct bit within the byte
-	for (i = startLocation; i < (startLocation+freeNode->buffSize/16); i++)
+
+	//If we are setting blocks to mark as allocated...
+	if (set)
+		for (i = startLocation; i < (startLocation+freeNode->buffSize/16); i++)
+		{
+			byte = i/8; //Used tp access correct byte in bitmap
+			bit = i%8; //Used to set correct bit in byte
+			pageNode->bitMap[byte] |= 0x01 << bit; // set bit by or-ing byte sized portion of the bitmap with a mask
+		}
+	//If we are clearing blocks to mark as free...
+	else
 	{
-		byte = i/8; //Used tp access correct byte in bitmap
-		bit = i%8; //Used to set correct bit in byte
-		pageNode->bitMap[byte] |= 0x01 << bit; // set bit by or-ing byte sized portion of the bitmap with a mask
+		for (i = startLocation; i < (startLocation+freeNode->buffSize/16); i++)
+		{
+			byte = i/8; //Used tp access correct byte in bitmap
+			bit = i%8; //Used to set correct bit in byte
+			pageNode->bitMap[byte] &= !(0x01 << bit); // clear bit by and-ing byte sized portion of the bitmap with a mask
+		}
 	}
 
 	return;
 }
+
+pageListNode* getPageNode(freeListNode* freeNode)
+{
+	//Get the first node of the page list
+	pageListNode* pageNode = FILLED_PAGE_NODE_LIST;
+
+	//Find the page node that corresponds to the data page that buff is in
+	while(pageNode != NULL && !isBuffInPage(freeNode, pageNode))
+	{
+		pageNode = pageNode->nextNode;
+	}
+
+	return pageNode;
+}
+
+//Returns true if freeNode reffers to a buffer that is in the data page held by page node
+bool isBuffInPage(freeListNode* freeNode, pageListNode* pageNode)
+{
+	void* pageHead = pageNode->dataPage->ptr;
+	void* pageEnd = pageNode->dataPage->ptr + 8192;
+
+	if(freeNode->buffLocation >= pageHead && freeNode->buffLocation < pageEnd)
+		return TRUE;
+	else
+		return FALSE;
+}
+
+bool isDataPageEmpty(pageListNode* pageNode)
+{
+	//Assume the list is empty
+	bool isEmpty = TRUE;
+	int i;
+
+	//Check every char in the bitmap
+	for(i = 0; i < 64; i++)
+	{
+		//If a single char in the bitmap isn't the null character
+		if (pageNode->bitMap[i] != '\0')
+			//Mark the data page as not empty
+			isEmpty = FALSE;
+	}
+
+	return isEmpty;
+}
+
+void removeDataPage(pageListNode* pageToDelete)
+{
+	int size;
+	freeListNode* freeNode;
+	freeListNode* freeNodeToDelete;
+
+	//Check every filled free node list
+	for(size = 16; size <= 8192; size=size*2)
+	{
+		freeNode = FILLED_FREE_NODE_LIST(size);
+		//Check every node in each free node list
+		while (freeNode != NULL)
+		{
+			//If the node is in the page to be deleted
+			if (isBuffInPage(freeNode, pageToDelete))
+			{
+				freeNodeToDelete = freeNode;
+				freeNode = freeNode->nextNode;
+				removeFreeListNode(freeNodeToDelete);
+			}
+			else
+			{
+				freeNode = freeNode->nextNode;
+			}
+		}
+	}
+
+	free_page(pageToDelete->dataPage);
+
+	pageListNode* leadNode = FILLED_PAGE_NODE_LIST;
+	pageListNode* followNode = NULL;
+
+	while (leadNode != pageToDelete)
+	{
+		followNode = leadNode;
+		leadNode = leadNode->nextNode;
+	}
+
+	//Remove the node from the filled page node page list
+	if(followNode == NULL)
+		FILLED_PAGE_NODE_LIST = leadNode->nextNode;
+	else
+		followNode->nextNode = leadNode->nextNode;
+
+	//Add the node to the empty page node list
+	leadNode->nextNode = EMPTY_PAGE_NODE_LIST;
+	EMPTY_PAGE_NODE_LIST = leadNode;
+
+	//Decrement the node count for leadNode's page and check to see if that page should be freed
+	NODE_COUNT(leadNode->myPage) = NODE_COUNT(leadNode->myPage) - 1;
+	if(NODE_COUNT(leadNode->myPage) == 0 && leadNode->myPage != firstPageListPage)
+		removePageListPage(leadNode->myPage);
+
+	return;
+}
+void removePageListPage(kma_page_t* pageToDelete)
+{
+	//Get the head of the list for the empty page nodes
+	pageListNode* leadNode = EMPTY_PAGE_NODE_LIST;
+	//Trails lead node when traversing the list
+	pageListNode* followNode = NULL;
+
+	//Iterate through the entire list of empty page nodes and remove all nodes on pageToDelete
+	while (leadNode != NULL)
+	{
+		//If the current node is on the page to delete
+		if (leadNode->myPage == pageToDelete)
+		{
+			//Remove the node from the list
+			if (followNode == NULL)
+				EMPTY_PAGE_NODE_LIST = leadNode->nextNode;
+			else
+				followNode->nextNode = leadNode->nextNode;
+			//Go to the next node (follow node stays the same)
+			leadNode = leadNode->nextNode;
+		}
+
+		else
+		{
+			//Increment the lead node and the follow node
+			followNode = leadNode;
+			leadNode->nextNode = leadNode->nextNode;
+		}
+	}
+
+	//Free the input page
+	free_page(pageToDelete);
+
+	return;
+}
+
+void coalesce(freeListNode* freeNode)
+{
+	//If buffSize of freenode is 8192, return (nothing to coalesce)
+	if (freeNode->buffSize == 8192)
+		return;
+
+	void* buddyBuffLocation;
+
+	//Determine if buff of freeNode is left or right buddy
+	if ((freeNode->buffLocation & freeNode->buffSize) == 0)
+		//freeNode is the left buddy
+		buddyBuffLocation = freeNode->buffLocation + freeNode->buffSize;
+
+	else
+		//free node is the right buddy
+		buddyBuffLocation = freeNode->buffLocation - freeNode->buffSize;
+
+
+	//Get freeNode's buddy
+	freeListNode* freeBuddyNode = FILLED_FREE_NODE_LIST(freeNode->buffSize);
+	while (freeBuddyNode != NULL && freeBuddyNode->buddyBuffLocation != buddyBuffLocation)
+	{
+		freeBuddyNode = freeBuddyNode->nextNode;
+	}
+
+	//If freeNode's buddy is allocated (can't find a filled free node of that buddy's buff address), return (can't coalesce)
+	if (freeBuddyNode == NULL)
+		return;
+
+	//Add free node the combines freeNode and Buddy
+	addFreeListNode(min(freeNode->buffLocation, freeBuddyNode->buffLocation) ,freeNode->buffSize*2);
+
+	//Remove free node and buddy from free node list
+	removeFreeListNode(freeNode);
+	removeFreeListNode(freeBuddyNode);
+
+	//Try to coalesce the combined node
+	coalesce(FILLED_FREE_NODE_LIST(freeNode->buffSize*2));
+
+	return;
+}
+
+
 
 #endif // KMA_BUD
