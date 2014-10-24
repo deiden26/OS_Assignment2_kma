@@ -86,6 +86,9 @@ typedef struct
 //Returns node count int of the page you passed in
 #define NODE_COUNT(page) (*(int*)((void*)page->ptr + page->size - sizeof(int)))
 
+//Returns smaller of two addresses
+#define MIN_ADDR(x,y) ((x) < (y) ? (x) : (y))
+
 /************Global Variables*********************************************/
 
 /************Function Prototypes******************************************/
@@ -169,7 +172,7 @@ void kma_free(void* ptr, kma_size_t size)
 
 	//Otherwise, Coalesce the buffs of the page
 	else
-		coalesce(newFreeNode, pageNode);
+		coalesce(newFreeNode);
 	
 	return;
 }
@@ -673,7 +676,7 @@ void coalesce(freeListNode* freeNode)
 	void* buddyBuffLocation;
 
 	//Determine if buff of freeNode is left or right buddy
-	if ((freeNode->buffLocation & freeNode->buffSize) == 0)
+	if (((int)freeNode->buffLocation & freeNode->buffSize) == 0)
 		//freeNode is the left buddy
 		buddyBuffLocation = freeNode->buffLocation + freeNode->buffSize;
 
@@ -684,7 +687,7 @@ void coalesce(freeListNode* freeNode)
 
 	//Get freeNode's buddy
 	freeListNode* freeBuddyNode = FILLED_FREE_NODE_LIST(freeNode->buffSize);
-	while (freeBuddyNode != NULL && freeBuddyNode->buddyBuffLocation != buddyBuffLocation)
+	while (freeBuddyNode != NULL && freeBuddyNode->buffLocation != buddyBuffLocation)
 	{
 		freeBuddyNode = freeBuddyNode->nextNode;
 	}
@@ -694,7 +697,7 @@ void coalesce(freeListNode* freeNode)
 		return;
 
 	//Add free node the combines freeNode and Buddy
-	addFreeListNode(min(freeNode->buffLocation, freeBuddyNode->buffLocation) ,freeNode->buffSize*2);
+	addFreeListNode(MIN_ADDR(freeNode->buffLocation, freeBuddyNode->buffLocation) ,freeNode->buffSize*2);
 
 	//Remove free node and buddy from free node list
 	removeFreeListNode(freeNode);
