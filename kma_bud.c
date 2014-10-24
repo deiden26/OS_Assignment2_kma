@@ -98,7 +98,7 @@ freeListNode* getFreeNode(kma_size_t size);
 freeListNode* divideBuffer(freeListNode* node, kma_size_t size);
 void addFreeListNode(void* buffLocation, kma_size_t buffSize);
 void removeFreeListNode(freeListNode* node);
-void removeFreeListPage(kma_page_t);
+void removeFreeListPage(kma_page_t* pageToDelete);
 	
 /************External Declaration*****************************************/
 
@@ -276,7 +276,7 @@ void getNewDataPage()
 	FILLED_PAGE_NODE_LIST = newPageNode;
 
 	//Create an entry in the size 8192 free list for this new buffer
-	addFreeListNode(newPageNode->dataPage->ptr, 8192)
+	addFreeListNode(newPageNode->dataPage->ptr, 8192);
 
 	return;
 }
@@ -413,7 +413,7 @@ void removeFreeListNode(freeListNode* nodeToDelete)
 		followNode->nextNode = leadNode->nextNode;
 
 	//Add the node to the empty list
-	leadNode->next = EMPTY_FREE_NODE_LIST;
+	leadNode->nextNode = EMPTY_FREE_NODE_LIST;
 	EMPTY_FREE_NODE_LIST = leadNode;
 
 	NODE_COUNT(leadNode->myPage) = NODE_COUNT(leadNode->myPage) - 1;
