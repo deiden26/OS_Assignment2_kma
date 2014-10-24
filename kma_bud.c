@@ -65,6 +65,7 @@ typedef struct
 typedef struct
 {
 	void* buffLocation;
+	kma_size_t buffSize;
 	void* nextNode;
 	kma_page_t*  myPage; //Pointer to the page object that points to this node's page
 } freeListNode;
@@ -92,6 +93,12 @@ freeListNode* fillWithEmptyFreeNodes(kma_page_t* freeListPage, int offsetFromHea
 void getNewDataPage();
 void getNewPageListPage();
 void getNewFreeListPage();
+int pow2roundup (int x);
+freeListNode* getFreeNode(kma_size_t size);
+freeListNode* divideBuffer(freeListNode* node, kma_size_t size);
+void addFreeListNode(void* buffLocation, kma_size_t buffSize);
+void removeFreeListNode(freeListNode* node);
+void removeFreeListPage(kma_page_t);
 	
 /************External Declaration*****************************************/
 
@@ -105,7 +112,23 @@ void* kma_malloc(kma_size_t size)
 		initialize();
 	}
 
-  return NULL;
+	//Ignore requests for 0 or fewer bytes of memory
+	if (size <= 0)
+		return NULL;
+
+	//Get a freeListNode containing the closest fitting buffer size available
+	freeListNode* freeNode = getFreeNode(size);
+
+	//Divide the buffer until it is at its minimal size that still fits the request
+	freeNode = divideBuffer(freeNode, size);
+
+	//Get the address of the buffer to return
+	void* buff = freeNode->buffLocation;
+
+	//Remove the freeNode from the free node list (it's now allocated)
+	removeFreeListNode(freeNode);
+
+	return buff;
 }
 
 void kma_free(void* ptr, kma_size_t size)
@@ -252,23 +275,8 @@ void getNewDataPage()
 	//Make filled page node list point to the new node (insert in front)
 	FILLED_PAGE_NODE_LIST = newPageNode;
 
-	//If there isn't an empty free node to use, request a new free list page
-	if(EMPTY_FREE_NODE_LIST == NULL)
-		getNewFreeListPage();
-
-	//Get an empty free node
-	freeListNode* newFreeNode = EMPTY_FREE_NODE_LIST;
-	//Make empty free node list point to the next node in the list
-	EMPTY_FREE_NODE_LIST = EMPTY_FREE_NODE_LIST->nextNode;
-	//Increment node counter at the end of the page
-	NODE_COUNT(newFreeNode->myPage) = NODE_COUNT(newFreeNode->myPage) + 1;
-	//Fill pointer to buffer location
-	newFreeNode->buffLocation = newPageNode->dataPage->ptr;
-	//Make node point to the first node in the size 8192 filled free node list
-	newFreeNode->nextNode = FILLED_FREE_NODE_LIST(8192);
-	//Make size 8192 filled free node list point to the new node (insert in front)
-	FILLED_FREE_NODE_LIST(8192) = newFreeNode;
-
+	//Create an entry in the size 8192 free list for this new buffer
+	addFreeListNode(newPageNode->dataPage->ptr, 8192)
 
 	return;
 }
@@ -293,6 +301,162 @@ void getNewFreeListPage()
 	//Fill page list page with empty free nodes and make the empty free node list
 	//point to the first new empty free node of the new page
 	EMPTY_FREE_NODE_LIST = fillWithEmptyFreeNodes(newFreeListPage, 0);
+
+	return;
+}
+
+int pow2roundup (int x)
+{
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return (x+1 < 16) ? 16 : x + 1;
+}
+
+freeListNode* getFreeNode(kma_size_t size)
+{
+	//Round up size to a power of 2
+	size = pow2roundup(size);
+
+	//Get smallest available buffer that will fit the request
+	freeListNode* freeNode = NULL;
+	while (freeNode == NULL && size <= 8192)
+	{
+		freeNode = FILLED_FREE_NODE_LIST(size);
+		size = size * 2;
+	}
+
+	//If there aren't any available buffers
+	if (freeNode == NULL)
+	{
+		//Allocate a new data page and do all of the book keeping
+		getNewDataPage();
+		//Set freeNode equal to the node just created by getNewDataPage
+		freeNode = FILLED_FREE_NODE_LIST(8192);
+	}
+
+	return freeNode;
+}
+
+freeListNode* divideBuffer(freeListNode* node, kma_size_t size)
+{
+	//Round up size to a power of 2
+	size = pow2roundup(size);
+
+	//Size of buffs you are creating via division in each loop iteration
+	int nextSize;
+
+	//Until we reach the target size...
+	while (node->buffSize != size)
+	{
+		//Calculate the size of the new buffers we're creating
+		nextSize = node->buffSize/2;
+		//Create two new buffers from the old buffer
+		addFreeListNode(node->buffLocation, nextSize);
+		addFreeListNode(node->buffLocation + nextSize, nextSize);
+		//Remove reference to the old buffer
+		removeFreeListNode(node);
+		//Update node to reference the new buffer that's on the "left" (lower memory address)
+		node = FILLED_FREE_NODE_LIST(nextSize);
+	}
+
+	return node;
+}
+
+
+void addFreeListNode(void* buffLocation, kma_size_t buffSize)
+{
+	//If there isn't an empty free node to use, request a new free list page
+	if(EMPTY_FREE_NODE_LIST == NULL)
+		getNewFreeListPage();
+
+	//Get an empty free node
+	freeListNode* newFreeNode = EMPTY_FREE_NODE_LIST;
+	//Make empty free node list point to the next node in the list
+	EMPTY_FREE_NODE_LIST = EMPTY_FREE_NODE_LIST->nextNode;
+	//Increment node counter at the end of the page
+	NODE_COUNT(newFreeNode->myPage) = NODE_COUNT(newFreeNode->myPage) + 1;
+	//Fill pointer to buffer location
+	newFreeNode->buffLocation = buffLocation;
+	//Fill buffer size
+	newFreeNode->buffSize = buffSize;
+	//Make node point to the first node in the filled free node list of buffSize
+	newFreeNode->nextNode = FILLED_FREE_NODE_LIST(buffSize);
+	//Make filled free node list of buffSize point to the new node (insert in front)
+	FILLED_FREE_NODE_LIST(buffSize) = newFreeNode;
+
+	return;
+}
+void removeFreeListNode(freeListNode* nodeToDelete)
+{
+	//Get size of the node to remove from list
+	kma_size_t size = nodeToDelete->buffSize;
+
+	//Get the head of the list for the buffSize (will be used to traverse the list)
+	freeListNode* leadNode = FILLED_FREE_NODE_LIST(size);
+	//Trails lead node when traversing the list
+	freeListNode* followNode = NULL;
+
+	while (leadNode != nodeToDelete)
+	{
+		followNode = leadNode;
+		leadNode = leadNode->nextNode;
+	}
+
+	//Remove the node from its list
+	if (followNode == NULL)
+		FILLED_FREE_NODE_LIST(size) = leadNode->nextNode;
+	else
+		followNode->nextNode = leadNode->nextNode;
+
+	//Add the node to the empty list
+	leadNode->next = EMPTY_FREE_NODE_LIST;
+	EMPTY_FREE_NODE_LIST = leadNode;
+
+	NODE_COUNT(leadNode->myPage) = NODE_COUNT(leadNode->myPage) - 1;
+
+	//If the page that leadNode is on no longer has any filled nodes
+	if (NODE_COUNT(leadNode->myPage) == 0)
+		removeFreeListPage(leadNode->myPage);
+
+	return;
+}
+
+void removeFreeListPage(kma_page_t* pageToDelete)
+{
+	//Get the head of the list for the empty free nodes
+	freeListNode* leadNode = EMPTY_FREE_NODE_LIST;
+	//Trails lead node when traversing the list
+	freeListNode* followNode = NULL;
+
+	//Iterate through the entire list of empty free nodes and remove all nodes on pageToDelete
+	while (leadNode != NULL)
+	{
+		//If the current node is on the page to delete
+		if (leadNode->myPage == pageToDelete)
+		{
+			//Remove the node from the list
+			if (followNode == NULL)
+				EMPTY_FREE_NODE_LIST = leadNode->nextNode;
+			else
+				followNode->nextNode = leadNode->nextNode;
+			//Go to the next node (follow node stays the same)
+			leadNode = leadNode->nextNode;
+		}
+
+		else
+		{
+			//Increment the lead node and the follow node
+			followNode = leadNode;
+			leadNode->nextNode = leadNode->nextNode;
+		}
+	}
+
+	//Free the input page
+	free_page(pageToDelete);
 
 	return;
 }
