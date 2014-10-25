@@ -113,6 +113,7 @@ bool isDataPageEmpty(pageListNode* pageNode);
 void removeDataPage(pageListNode* pageToDelete);
 void removePageListPage(kma_page_t* pageToDelete);
 void coalesce(freeListNode* freeNode);
+void cleanUp();
 	
 /************External Declaration*****************************************/
 
@@ -176,6 +177,11 @@ void kma_free(void* ptr, kma_size_t size)
 	//Otherwise, Coalesce the buffs of the page
 	else
 		coalesce(newFreeNode);
+
+	//If there is currently only one data page and it's empty
+	if (FILLED_PAGE_NODE_LIST->nextNode == NULL && isDataPageEmpty(FILLED_PAGE_NODE_LIST))
+		//Remove all pages
+		cleanUp();
 	
 	return;
 }
@@ -398,7 +404,6 @@ freeListNode* divideBuffer(freeListNode* node, kma_size_t size)
 	{
 		//Calculate the size of the new buffers we're creating
 		nextSize = (node->buffSize)/2;
-		printf("%d | %d | %d\n", size, node->buffSize, nextSize);
 		//Create two new buffers from the old buffer
 		addFreeListNode(node->buffLocation, nextSize);
 		addFreeListNode(node->buffLocation + nextSize, nextSize);
@@ -708,6 +713,24 @@ void coalesce(freeListNode* freeNode)
 
 	//Try to coalesce the combined node
 	coalesce(FILLED_FREE_NODE_LIST(freeNode->buffSize*2));
+
+	return;
+}
+
+//Destroy all pages when no memory is currently allocated
+void cleanUp()
+{
+	//Remove the last free list page
+	free_page(FILLED_FREE_NODE_LIST(8192)->myPage);
+
+	//Remove the last data page
+	free_page(FILLED_PAGE_NODE_LIST->dataPage);
+
+	//Remove the last data page
+	free_page(firstPageListPage);
+
+	//Set firstPageListPage equal to null so things will initialize if kma_malloc is called again
+	firstPageListPage = NULL;
 
 	return;
 }
