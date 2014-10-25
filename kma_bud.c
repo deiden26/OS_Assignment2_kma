@@ -54,19 +54,20 @@
 
 kma_page_t* firstPageListPage = NULL;
 
-typedef struct
+
+typedef struct pageListNode
 {
 	char bitMap[64]; //Bit map to track allocated vs free data in data pages (64 bytes = 512bits, 512*16 = 8192)
-	void* nextNode; //Pointer to next page List Node
+	struct pageListNode* nextNode; //Pointer to next page List Node
 	kma_page_t* dataPage; //Pointer to page object that points to a data page
 	kma_page_t*  myPage; //Pointer to page object that points to the page this node is stored on
 } pageListNode;
 
-typedef struct
+typedef struct freeListNode
 {
 	void* buffLocation;
 	kma_size_t buffSize;
-	void* nextNode;
+	struct freeListNode* nextNode;
 	kma_page_t*  myPage; //Pointer to the page object that points to this node's page
 } freeListNode;
 
@@ -115,7 +116,6 @@ void coalesce(freeListNode* freeNode);
 	
 /************External Declaration*****************************************/
 
-
 /**************Implementation***********************************************/
 
 void* kma_malloc(kma_size_t size)
@@ -153,6 +153,9 @@ void* kma_malloc(kma_size_t size)
 
 void kma_free(void* ptr, kma_size_t size)
 {
+	//Round size up to a power of 2 (this is the size of the buffer it was actually given)
+	size = pow2roundup(size);
+
 	//Create free node for newly freed block of memory
 	addFreeListNode(ptr, size);
 
@@ -394,7 +397,8 @@ freeListNode* divideBuffer(freeListNode* node, kma_size_t size)
 	while (node->buffSize != size)
 	{
 		//Calculate the size of the new buffers we're creating
-		nextSize = node->buffSize/2;
+		nextSize = (node->buffSize)/2;
+		printf("%d | %d | %d\n", size, node->buffSize, nextSize);
 		//Create two new buffers from the old buffer
 		addFreeListNode(node->buffLocation, nextSize);
 		addFreeListNode(node->buffLocation + nextSize, nextSize);
@@ -406,7 +410,6 @@ freeListNode* divideBuffer(freeListNode* node, kma_size_t size)
 
 	return node;
 }
-
 
 void addFreeListNode(void* buffLocation, kma_size_t buffSize)
 {
@@ -687,13 +690,13 @@ void coalesce(freeListNode* freeNode)
 
 	//Get freeNode's buddy
 	freeListNode* freeBuddyNode = FILLED_FREE_NODE_LIST(freeNode->buffSize);
-	while (freeBuddyNode != NULL && freeBuddyNode->buffLocation != buddyBuffLocation)
+	while ((int)freeBuddyNode != 0 && freeBuddyNode->buffLocation != buddyBuffLocation)
 	{
 		freeBuddyNode = freeBuddyNode->nextNode;
 	}
 
 	//If freeNode's buddy is allocated (can't find a filled free node of that buddy's buff address), return (can't coalesce)
-	if (freeBuddyNode == NULL)
+	if ((int)freeBuddyNode == 0)
 		return;
 
 	//Add free node the combines freeNode and Buddy
