@@ -75,13 +75,12 @@
  *    Output: the base address of the page
  ***********************************************************************/
 #define BASEADDR(x) ((void*)(((long) (x)) & ~(PAGESIZE-1)))
-#include "uthash.h"
+
 typedef struct
 {
   int id;
   void* ptr;
   int size;
-  UT_hash_handle hh;
 } kma_page_t;
 
 typedef struct

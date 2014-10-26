@@ -53,12 +53,6 @@
  */
 
 kma_page_t* firstPageListPage = NULL;
-static kma_page_t* pageDict = NULL;
-
-int dataPageCount = 0;
-int pageListPageCount = 0;
-int freeListPageCount = 0;
-
 
 
 typedef struct pageListNode
@@ -158,42 +152,6 @@ void* kma_malloc(kma_size_t size)
 	return buff;
 }
 
-/*
-void kma_free(void* ptr, kma_size_t size)
-{
-	//Round size up to a power of 2 (this is the size of the buffer it was actually given)
-	size = pow2roundup(size);
-
-	//Create free node for newly freed block of memory
-	addFreeListNode(ptr, size);
-
-	//Get pointer to newly created free node
-	freeListNode* newFreeNode = FILLED_FREE_NODE_LIST(size);
-
-	//Get the page node associated with the free node
-	pageListNode* pageNode =  getPageNode(newFreeNode);
-
-	//Update bitmap to reflect newly freed block of memory
-	updateBitMap(newFreeNode, pageNode, 0);
-
-	//If there is more than one data page and bitmap of current page is completely free
-	if (FILLED_PAGE_NODE_LIST->nextNode != NULL && isDataPageEmpty(pageNode))
-		//Remove the current data page and update the page list page
-		removeDataPage(pageNode);
-
-	//Otherwise, Coalesce the buffs of the page
-	else
-		coalesce(newFreeNode);
-
-	//If there is currently only one data page and it's empty
-	if (FILLED_PAGE_NODE_LIST->nextNode == NULL && isDataPageEmpty(FILLED_PAGE_NODE_LIST))
-		//Remove all pages
-		cleanUp();
-	
-	return;
-}
-*/
-
 void kma_free(void* ptr, kma_size_t size)
 {
 	//Round size up to a power of 2 (this is the size of the buffer it was actually given)
@@ -213,7 +171,6 @@ void kma_free(void* ptr, kma_size_t size)
 
 
 	coalesce(newFreeNode);
-	freeListNode* what2 = FILLED_FREE_NODE_LIST(8192);
 
 	if (FILLED_PAGE_NODE_LIST->nextNode != NULL && FILLED_FREE_NODE_LIST(8192) != NULL)
 		removeDataPage(pageNode);
@@ -235,8 +192,6 @@ void initialize()
 
 	//Allocate first page list page (pointed to by firstPageListPage)
 	firstPageListPage = get_page();
-	pageListPageCount++;
-	HASH_ADD_INT(pageDict, id, firstPageListPage);
 
 	//Fill page list page with empty page nodes leaving room for the pointers to
 	//the free list page, the first filled node, and the first empty node. Also,
@@ -253,8 +208,6 @@ void initialize()
 	//Allocate a free list page (first entry in page list) and
 	//put a pointer to it at the head of the first page list page
 	kma_page_t* freeListPage = get_page();
-	freeListPageCount++;
-	HASH_ADD_INT(pageDict, id, freeListPage);
 	*((kma_page_t**)firstPageListPage->ptr) = freeListPage;
 
 	//Fill free list page with empty free nodes leaving room for the pointers to
@@ -356,8 +309,6 @@ void getNewDataPage()
 	NODE_COUNT(newPageNode->myPage) = NODE_COUNT(newPageNode->myPage) + 1;
 	//Allocate new data page
 	newPageNode->dataPage = get_page();
-	dataPageCount++;
-	HASH_ADD_INT(pageDict, id, newPageNode->dataPage);
 	//Clear bitMap
 	int i;
 	for (i = 0; i < 64; i++)
@@ -379,8 +330,6 @@ void getNewPageListPage()
 {
 	//Get a new page of memory
 	kma_page_t* newPageListPage = get_page();
-	pageListPageCount++;
-	HASH_ADD_INT(pageDict, id, newPageListPage);
 
 	//Fill page list page with empty page nodes and make the empty page node list
 	//point to the first new empty page node of the new page
@@ -393,8 +342,6 @@ void getNewFreeListPage()
 {
 	//Get a new page of memory
 	kma_page_t* newFreeListPage = get_page();
-	freeListPageCount++;
-	HASH_ADD_INT(pageDict, id, newFreeListPage);
 
 	//Fill page list page with empty free nodes and make the empty free node list
 	//point to the first new empty free node of the new page
@@ -555,8 +502,6 @@ void removeFreeListPage(kma_page_t* pageToDelete)
 
 	//Free the input page
 	free_page(pageToDelete);
-	freeListPageCount--;
-	HASH_DEL(pageDict, pageToDelete);
 
 	return;
 }
@@ -663,8 +608,6 @@ void removeDataPage(pageListNode* pageToDelete)
 	}
 
 	free_page(pageToDelete->dataPage);
-	dataPageCount--;
-	HASH_DEL(pageDict, pageToDelete->dataPage);
 
 	pageListNode* leadNode = FILLED_PAGE_NODE_LIST;
 	pageListNode* followNode = NULL;
@@ -725,8 +668,6 @@ void removePageListPage(kma_page_t* pageToDelete)
 
 	//Free the input page
 	free_page(pageToDelete);
-	pageListPageCount--;
-	HASH_DEL(pageDict, pageToDelete);
 
 	return;
 }
@@ -776,53 +717,22 @@ void coalesce(freeListNode* freeNode)
 //Destroy all pages when no memory is currently allocated
 void cleanUp()
 {
-	freeListNode* what = FILLED_FREE_NODE_LIST(8192);
-	while (what != NULL)
-	{
-		printf("id: %d | buffLocation: %d\n", what->myPage->id, what->buffLocation);
-		what = what->nextNode;
-	}
-
 	//Remove the 1st free list page (if it doesn't contain the last node)
 	if (FIRST_FREE_LIST_PAGE != FILLED_FREE_NODE_LIST(8192)->myPage)
-	{
-		HASH_DEL(pageDict, FIRST_FREE_LIST_PAGE);
 		free_page(FIRST_FREE_LIST_PAGE);
-		freeListPageCount--;
-	}
 
 	//Remove the free list page of last free list node
-	HASH_DEL(pageDict, FILLED_FREE_NODE_LIST(8192)->myPage);
 	free_page(FILLED_FREE_NODE_LIST(8192)->myPage);
-	freeListPageCount--;
 
 	//Remove the last data page
-	HASH_DEL(pageDict, FILLED_PAGE_NODE_LIST->dataPage);
 	free_page(FILLED_PAGE_NODE_LIST->dataPage);
-	dataPageCount--;
 
 	//Remove the page list page of the last node (if it isn't the firstPageListPage)
 	if (FILLED_PAGE_NODE_LIST->myPage != firstPageListPage)
-	{
-		HASH_DEL(pageDict, FILLED_PAGE_NODE_LIST->myPage);
 		free_page(FILLED_PAGE_NODE_LIST->myPage);
-		pageListPageCount--;
-	}
 
 	//Remove the last page list page
-	HASH_DEL(pageDict, firstPageListPage);
 	free_page(firstPageListPage);
-	pageListPageCount--;
-
-	printf("free: %d\n", freeListPageCount);
-	printf("data: %d\n", dataPageCount);
-	printf("page: %d\n", pageListPageCount);
-
-	kma_page_t *s;
-
-    for(s=pageDict; s != NULL; s=s->hh.next) {
-        printf("id: %d\n", s->id);
-    }
 
 	//Set firstPageListPage equal to null so things will initialize if kma_malloc is called again
 	firstPageListPage = NULL;
