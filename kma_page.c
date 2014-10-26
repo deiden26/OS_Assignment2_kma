@@ -87,7 +87,7 @@ get_page()
   res->ptr = allocPage();
   
   assert(res->ptr != NULL);
-  
+
   return res;	
 }
 
