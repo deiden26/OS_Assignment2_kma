@@ -172,6 +172,7 @@ void kma_free(void* ptr, kma_size_t size)
 
 	coalesce(newFreeNode);
 
+	//If there is currently a size 8192 buffer available, we just made an empty page (and it should be destroyed)
 	if (FILLED_PAGE_NODE_LIST->nextNode != NULL && FILLED_FREE_NODE_LIST(8192) != NULL)
 		removeDataPage(pageNode);
 
@@ -243,8 +244,8 @@ pageListNode* fillWithEmptyPageNodes(kma_page_t* pageListPage, int offsetFromHea
 	//nodes on the page
 	*(int*)effectivePageEnd = 0;
 
-	//While there is room to insert another page list node... (probably can be <=, but try that later)
-	while((void*)pageNode + sizeof(pageListNode) < effectivePageEnd)
+	//While there is room to insert another page list node...
+	while((void*)pageNode + sizeof(pageListNode) <= effectivePageEnd)
 	{
 		//Add pointer to the pageListPage to each new empty page node
 		pageNode->myPage = pageListPage;
@@ -275,8 +276,8 @@ freeListNode* fillWithEmptyFreeNodes(kma_page_t* freeListPage, int offsetFromHea
 	//nodes on the page
 	*(int*)effectivePageEnd = 0;
 
-	//While there is room to insert another page list node... (probably can be <=, but try that later)
-	while((void*)freeNode + sizeof(freeListNode) < effectivePageEnd)
+	//While there is room to insert another page list node...
+	while((void*)freeNode + sizeof(freeListNode) <= effectivePageEnd)
 	{
 		//Add pointer to the freeListPage to each new empty free node
 		freeNode->myPage = freeListPage;
@@ -582,30 +583,9 @@ bool isDataPageEmpty(pageListNode* pageNode)
 
 void removeDataPage(pageListNode* pageToDelete)
 {
-	int size;
-	freeListNode* freeNode;
-	freeListNode* freeNodeToDelete;
-
-	//Check every filled free node list
-	for(size = 16; size <= 8192; size=size*2)
-	{
-		freeNode = FILLED_FREE_NODE_LIST(size);
-		//Check every node in each free node list
-		while (freeNode != NULL)
-		{
-			//If the node is in the page to be deleted
-			if (isBuffInPage(freeNode, pageToDelete))
-			{
-				freeNodeToDelete = freeNode;
-				freeNode = freeNode->nextNode;
-				removeFreeListNode(freeNodeToDelete);
-			}
-			else
-			{
-				freeNode = freeNode->nextNode;
-			}
-		}
-	}
+	//Remove the (only) free node of size 8192 (it should belong to the page we're deleting
+	//because we only delete empty pages)
+	removeFreeListNode(FILLED_FREE_NODE_LIST(8192));
 
 	free_page(pageToDelete->dataPage);
 
