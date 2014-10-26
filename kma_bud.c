@@ -500,7 +500,7 @@ void removeFreeListPage(kma_page_t* pageToDelete)
 		{
 			//Increment the lead node and the follow node
 			followNode = leadNode;
-			leadNode->nextNode = leadNode->nextNode;
+			leadNode = leadNode->nextNode;
 		}
 	}
 
@@ -510,7 +510,7 @@ void removeFreeListPage(kma_page_t* pageToDelete)
 	return;
 }
 
-void updateBitMap(freeListNode* freeNode, pageListNode* pageNode, bool set)
+void updateBitMap(freeListNode* freeNode, pageListNode* pageNode, bool set) 
 {
 	//Update the bitmap to reflect all newly allocated buffers
 	int i;
@@ -520,20 +520,20 @@ void updateBitMap(freeListNode* freeNode, pageListNode* pageNode, bool set)
 
 	//If we are setting blocks to mark as allocated...
 	if (set)
-		for (i = startLocation; i < (startLocation+freeNode->buffSize/16); i++)
+		for (i = startLocation; i < startLocation+(freeNode->buffSize/16); i++)
 		{
 			byte = i/8; //Used tp access correct byte in bitmap
 			bit = i%8; //Used to set correct bit in byte
-			pageNode->bitMap[byte] |= 0x01 << bit; // set bit by or-ing byte sized portion of the bitmap with a mask
+			pageNode->bitMap[byte] |= 0x80 >> bit; // set bit by or-ing byte sized portion of the bitmap with a mask
 		}
 	//If we are clearing blocks to mark as free...
 	else
 	{
-		for (i = startLocation; i < (startLocation+freeNode->buffSize/16); i++)
+		for (i = startLocation; i < startLocation+(freeNode->buffSize/16); i++)
 		{
 			byte = i/8; //Used tp access correct byte in bitmap
 			bit = i%8; //Used to set correct bit in byte
-			pageNode->bitMap[byte] &= !(0x01 << bit); // clear bit by and-ing byte sized portion of the bitmap with a mask
+			pageNode->bitMap[byte] &= !(0x80 >> bit); // clear bit by and-ing byte sized portion of the bitmap with a mask
 		}
 	}
 
