@@ -50,6 +50,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 /************Private include**********************************************/
 #include "kma_page.h"
@@ -75,6 +76,10 @@ typedef struct mem
   void* value; // to check correctness
   enum REQ_STATE state;
 } mem_t;
+
+//Variables used to record average performance
+float avgMallocTime = 0;
+float avgFreeTime = 0;
 
 /************Global Variables*********************************************/
 
@@ -214,9 +219,13 @@ main(int argc, char* argv[])
   
   
   stat = page_stats();
+
+  #ifndef COMPETITION
+  printf("Average milliseconds to malloc: %2f\n Average milliseconds to free: %2f\n", avgMallocTime, avgFreeTime);
+  #endif
   
   printf("Page Requested/Freed/In Use: %5d/%5d/%5d\n",
-	 stat->num_requested, stat->num_freed, stat->num_in_use);	
+	 stat->num_requested, stat->num_freed, stat->num_in_use);
   
   if (stat->num_requested != stat->num_freed || stat->num_in_use != 0)
     {
@@ -270,7 +279,20 @@ allocate(mem_t* requests, int req_id, int req_size)
   assert(new->state == FREE);
   
   new->size = req_size;
-  new->ptr = kma_malloc(new->size);
+
+  #ifndef COMPETITION
+    clock_t begin = clock();
+    new->ptr = kma_malloc(new->size);
+    clock_t end = clock();
+    if(avgMallocTime == 0)
+      avgMallocTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
+    else
+      avgMallocTime = (avgMallocTime + 1000*((double)(end - begin) / CLOCKS_PER_SEC))/2;
+  #endif
+
+  #ifdef COMPETITION
+    new->ptr = kma_malloc(new->size);
+  #endif
   
   // Accept a NULL response in some cases... 
   if(!(((new->ptr != NULL) && (new->size <= (PAGESIZE - sizeof(void*))))
@@ -321,7 +343,14 @@ deallocate(mem_t* requests, int req_id)
   check((char*)cur->ptr, (char*)cur->value, cur->size);
 
   // free memory
+  clock_t begin = clock();
   free(cur->value);
+  clock_t end = clock();
+  if(avgFreeTime == 0)
+    avgFreeTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
+  else
+    avgFreeTime = (avgFreeTime + 1000*((double)(end - begin) / CLOCKS_PER_SEC))/2;
+
 #endif
 
   kma_free(cur->ptr, cur->size);

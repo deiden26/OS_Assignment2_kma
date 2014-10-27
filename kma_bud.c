@@ -39,11 +39,9 @@
 #include <stdlib.h>
 #include <math.h>
 
-
 /************Private include**********************************************/
 #include "kma_page.h"
 #include "kma.h"
-#include <stdio.h>
 
 /************Defines and Typedefs*****************************************/
 /*  #defines and typedefs should have their names in all caps.
@@ -52,8 +50,8 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+//Holds the very first page that points to everything else
 kma_page_t* firstPageListPage = NULL;
-
 
 typedef struct pageListNode
 {
