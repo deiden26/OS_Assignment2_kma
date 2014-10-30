@@ -7,9 +7,27 @@ Worst milliseconds to malloc: 6.903000			 Worst milliseconds to free: 0.013000
 Page Requested/Freed/In Use: 911/911/0
 Average % wasted (Wasted Bytes / Total Bytes): 0.318892
 
+All resource map data is stored in line with the memory with this layout.
 
-Description here
+struct kma_frame
+{
+  kma_page_t* page;// storing a pointer to the page in each frame makes page_freeing simpler
+  kma_frame* prev;//the pointer to the previous frame
+  kma_frame* next;//the pointer to the next frame (always non-nil. last frame points to where next page would be added)
+  bool occupied;
+  bool last;//true when last in the resource map chain (used instead of making 'next' nil)
+};
 
+
+The map allocator has interesting performance charateristics. Since a linear search is required to find a free frame, average milliseconds to malloc increases as the size of the memory map increases. Additionally, since my implentation is "first fit" not "best fit" and I always suballocate a new frame if there is enough room, this list grows very quickly making malloc times slower.
+
+Using first fit with suballocation leads to about %31 average overhead. "Waste" is very dependent on the order the memory is requested and freed. Right now, I only free pages that are unutilized at the *end* of the map. I also implemented freeing unutilized pages at the begining, but at least in these test cases it makes no difference so I removed it. No pages are ever freed in the middle of the map. This is to make things simpler but also since all I store are the pointers to next and previous (not size), and changing this would require storing size.
+
+As an interesting side-effect, only freeing pages from the end causes my page requests and pages freed to be very low. While this increases waste, it also increases speed, as is often the case with memory/speed tradeoffs.
+
+Freeing memory is typically very quick with resource map. My implementation always coalesces free adjacent memory frames unless doing so would combine a frame across pages. This restriciton makes freeing pages simpler since there will always be a new frame at the begining of a page. We know to free a page when a free frame is at the begining of a page and points to another frame that is also the begining of a page.  
+
+Since a pointer to the frame to be freed is given as an input in kma_free(ptr, size), I should have calculated the address of the frame from the address to be freed. But at the time I very needlessly implemented it as searching through the entire map to find it (increasing free times) instead of just casting the pointer. Changing this would be simple and would considerably speed up 'free' times but average milliseconds and worst milliseconds to free is still very respectable.
 --------------------------------------------------------------------------
 Buddy Allocator
 --------------------------------------------------------------------------
