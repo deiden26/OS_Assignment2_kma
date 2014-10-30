@@ -5,6 +5,7 @@ Resource Map Allocator
 Average milliseconds to malloc: 0.017934		 Average milliseconds to free: 0.000587
 Worst milliseconds to malloc: 6.903000			 Worst milliseconds to free: 0.013000
 Page Requested/Freed/In Use:   911/  911/    0
+Average % wasted (Wasted Bytes / Total Bytes): 0.318892
 
 
 Description here
@@ -16,6 +17,7 @@ Buddy Allocator
 Average milliseconds to malloc: 0.004166	 Average milliseconds to free: 0.000509
 Worst milliseconds to malloc: 7.309000		 Worst milliseconds to free: 0.034000
 Page Requested/Freed/In Use: 10064/10064/    0
+Average % wasted (Wasted Bytes / Total Bytes): 0.356648
 
 
 Description here

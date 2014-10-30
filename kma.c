@@ -129,10 +129,11 @@ main(int argc, char* argv[])
   int n_req = 0, n_alloc=0, n_dealloc=0;
   kma_page_stat_t* stat;
 
-#ifdef COMPETITION
+//#ifdef COMPETITION
   double ratioSum = 0.0;
   int ratioCount = 0;
-#endif
+//#endif
+
   
 #ifndef COMPETITION
   FILE* allocTrace = fopen("kma_output.dat", "w");
@@ -212,6 +213,17 @@ main(int argc, char* argv[])
 #endif
 
 #ifndef COMPETITION
+      if(req_id < n_req && n_alloc != n_dealloc)
+  {
+    // We can calculate the ratio of wasted to used memory here.
+
+    int wastedBytes = totalBytes - currentAllocBytes;
+    ratioSum += ((double) wastedBytes) / totalBytes;
+    ratioCount += 1;
+  }
+#endif
+
+#ifndef COMPETITION
       fprintf(allocTrace, "%d %d %d\n", index, currentAllocBytes, totalBytes);
 #endif
       
@@ -228,6 +240,7 @@ main(int argc, char* argv[])
   #ifndef COMPETITION
   printf("Average milliseconds to malloc: %2f\t Average milliseconds to free: %2f\n", totMallocTime/mallocCount, totFreeTime/freeCount);
   printf("Worst milliseconds to malloc: %2f\t\t Worst milliseconds to free: %2f\n", worstMallocTime, worstFreeTime);
+  printf("Average %% wasted (Wasted Bytes / Total Bytes): %f\n", ratioSum / ratioCount);
   #endif
   
   printf("Page Requested/Freed/In Use: %5d/%5d/%5d\n",
