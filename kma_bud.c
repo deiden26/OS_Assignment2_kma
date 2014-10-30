@@ -528,7 +528,7 @@ void updateBitMap(freeListNode* freeNode, pageListNode* pageNode, bool set)
 		{
 			byte = i/8; //Used tp access correct byte in bitmap
 			bit = i%8; //Used to set correct bit in byte
-			pageNode->bitMap[byte] &= !(0x80 >> bit); // clear bit by and-ing byte sized portion of the bitmap with a mask
+			pageNode->bitMap[byte] &= ~(0x80 >> bit); // clear bit by and-ing byte sized portion of the bitmap with a mask
 		}
 	}
 
@@ -660,7 +660,6 @@ void coalesce(freeListNode* freeNode)
 
 	//Get the location of the buddy buffer
 	buddyBuffLocation =  (void*)((long)freeNode->buffLocation ^ (long)freeNode->buffSize);
-
 
 	//Get freeNode's buddy
 	freeListNode* freeBuddyNode = FILLED_FREE_NODE_LIST(freeNode->buffSize);
