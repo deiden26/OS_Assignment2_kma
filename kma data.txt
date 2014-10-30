@@ -1,0 +1,7 @@
+kma_rm
+	avg malloc time:  0.000221 milliseconds
+	avg free time: 0.000455 milliseconds
+
+kma_bud
+	avg malloc time: 0.000099 milliseconds
+	avg free time: 0.000158 milliseconds
