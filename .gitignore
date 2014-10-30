@@ -24,3 +24,13 @@
 *.i*86
 *.x86_64
 *.hex
+*.plist
+*.dSYM*
+*.dat
+kma_dummy
+kma_rm
+kma_bud
+kma_lzbud
+kma_mck2
+kma_p2fl
+kma_competition
