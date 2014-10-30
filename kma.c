@@ -78,8 +78,13 @@ typedef struct mem
 } mem_t;
 
 //Variables used to record average performance
-float avgMallocTime = 0;
-float avgFreeTime = 0;
+float totMallocTime = 0;
+int mallocCount = 0;
+float totFreeTime = 0;
+int freeCount = 0;
+//Variables used to record worst performance
+float worstFreeTime = 0;
+float worstMallocTime = 0;
 
 /************Global Variables*********************************************/
 
@@ -221,7 +226,8 @@ main(int argc, char* argv[])
   stat = page_stats();
 
   #ifndef COMPETITION
-  printf("Average milliseconds to malloc: %2f\n Average milliseconds to free: %2f\n", avgMallocTime, avgFreeTime);
+  printf("Average milliseconds to malloc: %2f\t Average milliseconds to free: %2f\n", totMallocTime/mallocCount, totFreeTime/freeCount);
+  printf("Worst milliseconds to malloc: %2f\t\t Worst milliseconds to free: %2f\n", worstMallocTime, worstFreeTime);
   #endif
   
   printf("Page Requested/Freed/In Use: %5d/%5d/%5d\n",
@@ -284,10 +290,10 @@ allocate(mem_t* requests, int req_id, int req_size)
     clock_t begin = clock();
     new->ptr = kma_malloc(new->size);
     clock_t end = clock();
-    if(avgMallocTime == 0)
-      avgMallocTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
-    else
-      avgMallocTime = (avgMallocTime + 1000*((double)(end - begin) / CLOCKS_PER_SEC))/2;
+    float mallocTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
+    worstMallocTime = worstMallocTime > mallocTime ? worstMallocTime : mallocTime;
+    totMallocTime = totMallocTime + mallocTime;
+    mallocCount++;
   #endif
 
   #ifdef COMPETITION
@@ -346,11 +352,10 @@ deallocate(mem_t* requests, int req_id)
   clock_t begin = clock();
   free(cur->value);
   clock_t end = clock();
-  if(avgFreeTime == 0)
-    avgFreeTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
-  else
-    avgFreeTime = (avgFreeTime + 1000*((double)(end - begin) / CLOCKS_PER_SEC))/2;
-
+  float freeTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
+  worstFreeTime = worstFreeTime > freeTime ? worstFreeTime : freeTime;
+  totFreeTime = totFreeTime + freeTime;
+  freeCount++;
 #endif
 
   kma_free(cur->ptr, cur->size);
