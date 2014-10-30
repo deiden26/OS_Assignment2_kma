@@ -309,7 +309,7 @@ void kma_free(void* ptr, kma_size_t size)
 
 	//fprintf(stdout, "request, free: %p\n", ptr_to_frame);
 
-	free_frame(get_frame(ptr_to_frame));
+	free_frame(ptr_to_frame);
 	//print_debug();
 }
 
