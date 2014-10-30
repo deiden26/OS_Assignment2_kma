@@ -4,7 +4,7 @@ Resource Map Allocator
 
 Average milliseconds to malloc: 0.017934		 Average milliseconds to free: 0.000587
 Worst milliseconds to malloc: 6.903000			 Worst milliseconds to free: 0.013000
-Page Requested/Freed/In Use:   911/  911/    0
+Page Requested/Freed/In Use: 911/911/0
 Average % wasted (Wasted Bytes / Total Bytes): 0.318892
 
 
@@ -16,11 +16,21 @@ Buddy Allocator
 
 Average milliseconds to malloc: 0.004166	 Average milliseconds to free: 0.000509
 Worst milliseconds to malloc: 7.309000		 Worst milliseconds to free: 0.034000
-Page Requested/Freed/In Use: 10064/10064/    0
+Page Requested/Freed/In Use: 10064/10064/0
 Average % wasted (Wasted Bytes / Total Bytes): 0.356648
 
 
-Description here
+The buddy allocator is on average very quick to allocate memory because it has multiple free lists. Its very fast to find the minimum sized block that can handle a request because you simply need to check the first element of 10 lists. Once the minimum sized block is found, the only remaining overhead is the time required to break the block into the requested size. 
+
+The buddy allocator has fairly bad worst case performance for allocating memory because there is a large amount of overhead in the initial set-up. This buddy allocator has three page types: data pages, bitmap pages, and free list pages. Both bitmap pages and free list pages are pre-filled with empty nodes whenever a new page is requested. This, combined with other initialization overhead, makes the buddy allocator perform poorly in the worst case of allocating space for new data.
+
+The buddy allocator is on average very fast at freeing memory. Freeing memory has three basic steps: create a new free node, alter the bitmap for the containing page of the buffer to reflect that the memory is freed, and coalesce the new free node recursively. Only the first two steps occur in the common case, and both are fast.
+
+The buddy allocator has fairly bad worst case performance for freeing memory because of the final step of freeing: coalescing. When coalescing occurs, this recursive process can take a long time (for example, coalescing a 16 byte block all the way up to 8192 bytes). This process makings freeing take a long time in the worst case.
+
+The buddy allocator requests a large number of pages while in use. This is because pages are frequently being freed. A data page is freed every time it coalesces up to being a single, completely free 8192 byte buffer. Bitmap pages and free list pages are freed when there are no more freed nodes on the page. This causes pages to be frequently freed and re-requested.
+
+About 35% of the buddy allocator's allocated memory is overhead. The amount of overhead increases quickly as the first requests come in and then follows the curve of requested memory. In other words, the amount of overhead is pretty constant; it doesn't grow or shrink very much after being established.
 
 --------------------------------------------------------------------------
 Comparison (Resource Map - Buddy Allocator)
@@ -29,3 +39,4 @@ Comparison (Resource Map - Buddy Allocator)
 Average milliseconds to malloc: 0.013768	 Average milliseconds to free: 0.000078
 Worst milliseconds to malloc: -0.406000		 Worst milliseconds to free: -0.021000
 Page Requested/Freed/In Use: -9153/-9153/    0
+Average % wasted (Wasted Bytes / Total Bytes): -0.037756
