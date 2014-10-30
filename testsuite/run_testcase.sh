@@ -57,7 +57,7 @@ for f in ${PROGS}; do
 			FILES="$FILES ${src}";
 		fi;
 	done;
-	${CC} ${CFLAGS} -D${f} -o $f ${FILES} >> ${OUTPUT}/gcc.output 2>&1;
+	${CC} ${CFLAGS} -D${f} -o $f ${FILES} -lm >> ${OUTPUT}/gcc.output 2>&1;
 	echo "----------" >> ${OUTPUT}/gcc.output;
 	if [ ! -f ${f} ]; then
 		${CC} ${CFLAGS} -D${f} -o $f ${FILES};
