@@ -37,7 +37,7 @@
 /************System include***********************************************/
 #include <assert.h>
 #include <stdlib.h>
- #include <stdio.h>
+#include <stdio.h>
 
 /************Private include**********************************************/
 #include "kma_page.h"
@@ -49,19 +49,6 @@
  *  variables should be in all lower case. When initializing
  *  structures and arrays, line everything up in neat columns.
  */
-
-/************Global Variables*********************************************/
-
-
-kma_page_t* entry_page = NULL;
-
-
-/************Function Prototypes******************************************/
- //each memory "frame" looks like this
-//byte 0: pointer to kma_page_t that allocated this memory
-//byte 4: int (0 means free, 1 means taken)
-//byte 8: int, size
-
 
  #define TAKEN TRUE
  #define FREE FALSE
@@ -81,6 +68,18 @@ struct kma_frame
   bool occupied;
   bool last;//true when last in "chain"
 };
+
+/************Global Variables*********************************************/
+
+
+kma_page_t* entry_page = NULL;
+
+
+/************Function Prototypes******************************************/
+ //each memory "frame" looks like this
+//byte 0: pointer to kma_page_t that allocated this memory
+//byte 4: int (0 means free, 1 means taken)
+//byte 8: int, size
 
 kma_frame* write_new_frame(void* addr, kma_page_t* page, kma_frame* prev, kma_frame* next, bool occupied, bool last);
 void* data_ptr(kma_frame* current);
@@ -314,8 +313,6 @@ void kma_free(void* ptr, kma_size_t size)
 	//print_debug();
 }
 
-#endif // KMA_RM
-
 void print_debug(){
 
 	kma_frame* current = first_frame();
@@ -337,6 +334,8 @@ void print_debug(){
 
 
 }
+
+#endif // KMA_RM
 
 //r ~/school/OS_Assignment2_kma/testsuite/1.trace
 //r ~/school/OS_Assignment2_kma/testsuite/2.trace
