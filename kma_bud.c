@@ -658,14 +658,8 @@ void coalesce(freeListNode* freeNode)
 
 	void* buddyBuffLocation;
 
-	//Determine if buff of freeNode is left or right buddy
-	if (((int)freeNode->buffLocation & freeNode->buffSize) == 0)
-		//freeNode is the left buddy
-		buddyBuffLocation = freeNode->buffLocation + freeNode->buffSize;
-
-	else
-		//free node is the right buddy
-		buddyBuffLocation = freeNode->buffLocation - freeNode->buffSize;
+	//Get the location of the buddy buffer
+	buddyBuffLocation =  (void*)((long)freeNode->buffLocation ^ (long)freeNode->buffSize);
 
 
 	//Get freeNode's buddy
