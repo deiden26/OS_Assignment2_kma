@@ -1,0 +1,62 @@
+--------------------------------------------------------------------------
+Resource Map Allocator
+--------------------------------------------------------------------------
+
+Average milliseconds to malloc: 0.017934		 Average milliseconds to free: 0.000587
+Worst milliseconds to malloc: 6.903000			 Worst milliseconds to free: 0.013000
+Page Requested/Freed/In Use: 911/911/0
+Average % wasted (Wasted Bytes / Total Bytes): 0.318892
+
+All resource map data is stored in line with the memory with this layout.
+
+struct kma_frame
+{
+  kma_page_t* page;// storing a pointer to the page in each frame makes page_freeing simpler
+  kma_frame* prev;//the pointer to the previous frame
+  kma_frame* next;//the pointer to the next frame (always non-nil. last frame points to where next page would be added)
+  bool occupied;
+  bool last;//true when last in the resource map chain (used instead of making 'next' nil)
+};
+
+
+The map allocator has interesting performance characteristics. Since a linear search is required to find a free frame, average milliseconds to malloc increases as the size of the memory map increases. Additionally, since my implantation is "first fit" not "best fit" and I always sub allocate a new frame if there is enough room, this list grows very quickly making malloc times slower.
+
+Using first fit with suballocation leads to about %31 average overhead. "Waste" is very dependent on the order the memory is requested and freed. Right now, I only free pages that are un-utilized at the *end* of the map. I also implemented freeing un-utilized pages at the beginning, but at least in these test cases it makes no difference so I removed it. No pages are ever freed in the middle of the map. This is to make things simpler but also since all I store are the pointers to next and previous (not size), and changing this would require storing size.
+
+As an interesting side-effect, only freeing pages from the end causes my page requests and pages freed to be very low. While this increases waste, it also increases speed, as is often the case with memory/speed tradeoffs. It is worth noting that the amount of waste increases over time as more memory is allocated and freed. This is because it is very rare that the current last page is completely free at any time, so the amount of pages rarely decreases until all allocated blocks are freed.
+
+Freeing memory is typically very quick with resource map. My implementation always coalesces free adjacent memory frames unless doing so would combine a frame across pages. This restriction makes freeing pages simpler since there will always be a new frame at the beginning of a page. We know to free a page when a free frame is at the beginning of a page and points to another frame that is also the beginning of a page.  
+
+Since a pointer to the frame to be freed is given as an input in kma_free(ptr, size), I should have calculated the address of the frame from the address to be freed. But at the time I very needlessly implemented it as searching through the entire map to find it (increasing free times) instead of just casting the pointer. Changing this would be simple and would considerably speed up 'free' times but average milliseconds and worst milliseconds to free is still very respectable.
+--------------------------------------------------------------------------
+Buddy Allocator
+--------------------------------------------------------------------------
+
+Average milliseconds to malloc: 0.004166	 Average milliseconds to free: 0.000509
+Worst milliseconds to malloc: 7.309000		 Worst milliseconds to free: 0.034000
+Page Requested/Freed/In Use: 10064/10064/0
+Average % wasted (Wasted Bytes / Total Bytes): 0.356648
+
+
+The buddy allocator is on average very quick to allocate memory because it has multiple free lists. Its very fast to find the minimum sized block that can handle a request because you simply need to check the first element of 10 lists. Once the minimum sized block is found, the only remaining overhead is the time required to break the block into the requested size. 
+
+The buddy allocator has fairly bad worst case performance for allocating memory because there is a large amount of overhead in the initial set-up. This buddy allocator has three page types: data pages, bitmap pages, and free list pages. Both bitmap pages and free list pages are pre-filled with empty nodes whenever a new page is requested. This, combined with other initialization overhead, makes the buddy allocator perform poorly in the worst case of allocating space for new data.
+
+The buddy allocator is on average very fast at freeing memory. Freeing memory has three basic steps: create a new free node, alter the bitmap for the containing page of the buffer to reflect that the memory is freed, and coalesce the new free node recursively. Only the first two steps occur in the common case, and both are fast.
+
+The buddy allocator has fairly bad worst case performance for freeing memory because of the final step of freeing: coalescing. When coalescing occurs, this recursive process can take a long time (for example, coalescing a 16 byte block all the way up to 8192 bytes). This process makings freeing take a long time in the worst case.
+
+The buddy allocator requests a large number of pages while in use. This is because pages are frequently being freed. A data page is freed every time it coalesces up to being a single, completely free 8192 byte buffer. Bitmap pages and free list pages are freed when there are no more freed nodes on the page. This causes pages to be frequently freed and re-requested.
+
+About 35% of the buddy allocator's allocated memory is overhead. The amount of overhead increases quickly as the first requests come in and then follows the curve of requested memory. In other words, the amount of overhead is pretty constant; it doesn't grow or shrink very much after being established.
+
+--------------------------------------------------------------------------
+Comparison (Resource Map - Buddy Allocator)
+--------------------------------------------------------------------------
+
+Average milliseconds to malloc: 0.013768	 Average milliseconds to free: 0.000078
+Worst milliseconds to malloc: -0.406000		 Worst milliseconds to free: -0.021000
+Page Requested/Freed/In Use: -9153/-9153/    0
+Average % wasted (Wasted Bytes / Total Bytes): -0.037756
+
+The buddy allocator has slightly better average speed than the resource map allocator but is slower in the worse case. This is likely because of the incredibly taxing set-up and coalescing that occurs in the buddy allocator. It's also worth noting that the buddy allocator requests many more pages than the resource map because it is constantly releasing and requesting new pages. The resource map, on the other hand, holds on to most of the pages it requests and therefore needs to requests new pages less infrequently. The fact that the average percent waste is the same for both algorithms is surprising but easily explained. The buddy allocator has roughly 30% waste throughout the trace. The resource map allocator starts with much lower waste but greatly increases its percent waste towards the end of the trace. By coincidence, the resource map allocator has just as much waste on average as the buddy allocator generally possesses.

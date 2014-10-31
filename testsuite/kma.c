@@ -50,6 +50,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 /************Private include**********************************************/
 #include "kma_page.h"
@@ -75,6 +76,15 @@ typedef struct mem
   void* value; // to check correctness
   enum REQ_STATE state;
 } mem_t;
+
+//Variables used to record average performance
+float totMallocTime = 0;
+int mallocCount = 0;
+float totFreeTime = 0;
+int freeCount = 0;
+//Variables used to record worst performance
+float worstFreeTime = 0;
+float worstMallocTime = 0;
 
 /************Global Variables*********************************************/
 
@@ -119,10 +129,11 @@ main(int argc, char* argv[])
   int n_req = 0, n_alloc=0, n_dealloc=0;
   kma_page_stat_t* stat;
 
-#ifdef COMPETITION
+//#ifdef COMPETITION
   double ratioSum = 0.0;
   int ratioCount = 0;
-#endif
+//#endif
+
   
 #ifndef COMPETITION
   FILE* allocTrace = fopen("kma_output.dat", "w");
@@ -202,6 +213,17 @@ main(int argc, char* argv[])
 #endif
 
 #ifndef COMPETITION
+      if(req_id < n_req && n_alloc != n_dealloc)
+  {
+    // We can calculate the ratio of wasted to used memory here.
+
+    int wastedBytes = totalBytes - currentAllocBytes;
+    ratioSum += ((double) wastedBytes) / totalBytes;
+    ratioCount += 1;
+  }
+#endif
+
+#ifndef COMPETITION
       fprintf(allocTrace, "%d %d %d\n", index, currentAllocBytes, totalBytes);
 #endif
       
@@ -214,9 +236,15 @@ main(int argc, char* argv[])
   
   
   stat = page_stats();
+
+  #ifndef COMPETITION
+  printf("Average milliseconds to malloc: %2f\t Average milliseconds to free: %2f\n", totMallocTime/mallocCount, totFreeTime/freeCount);
+  printf("Worst milliseconds to malloc: %2f\t\t Worst milliseconds to free: %2f\n", worstMallocTime, worstFreeTime);
+  printf("Average %% wasted (Wasted Bytes / Total Bytes): %f\n", ratioSum / ratioCount);
+  #endif
   
   printf("Page Requested/Freed/In Use: %5d/%5d/%5d\n",
-	 stat->num_requested, stat->num_freed, stat->num_in_use);	
+	 stat->num_requested, stat->num_freed, stat->num_in_use);
   
   if (stat->num_requested != stat->num_freed || stat->num_in_use != 0)
     {
@@ -270,7 +298,20 @@ allocate(mem_t* requests, int req_id, int req_size)
   assert(new->state == FREE);
   
   new->size = req_size;
-  new->ptr = kma_malloc(new->size);
+
+  #ifndef COMPETITION
+    clock_t begin = clock();
+    new->ptr = kma_malloc(new->size);
+    clock_t end = clock();
+    float mallocTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
+    worstMallocTime = worstMallocTime > mallocTime ? worstMallocTime : mallocTime;
+    totMallocTime = totMallocTime + mallocTime;
+    mallocCount++;
+  #endif
+
+  #ifdef COMPETITION
+    new->ptr = kma_malloc(new->size);
+  #endif
   
   // Accept a NULL response in some cases... 
   if(!(((new->ptr != NULL) && (new->size <= (PAGESIZE - sizeof(void*))))
@@ -321,7 +362,13 @@ deallocate(mem_t* requests, int req_id)
   check((char*)cur->ptr, (char*)cur->value, cur->size);
 
   // free memory
+  clock_t begin = clock();
   free(cur->value);
+  clock_t end = clock();
+  float freeTime = ((double)(end - begin) / CLOCKS_PER_SEC)*1000;
+  worstFreeTime = worstFreeTime > freeTime ? worstFreeTime : freeTime;
+  totFreeTime = totFreeTime + freeTime;
+  freeCount++;
 #endif
 
   kma_free(cur->ptr, cur->size);

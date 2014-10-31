@@ -62,9 +62,9 @@
 #define EXTERN extern
 #endif
 
-#define PAGESIZE 8192
+#define PAGESIZE 8192 //8KB (2^13 bytes)
 
-#define MAXPAGES 4096
+#define MAXPAGES 4096 //32MB (2^25 bytes)
 
 /***********************************************************************
  *  Title: Base Address Macro

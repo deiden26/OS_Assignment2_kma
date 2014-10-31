@@ -72,7 +72,7 @@ test-vm:
 	ssh -i id_aqualab -p 3022 aqualab@localhost 'bash -s' < vm_test.sh
 
 handin: clean
-	${TAR} ${TEAM}-${VERSION}-${PROJ}.tar ${DELIVERY} -lm
+	${TAR} ${TEAM}-${VERSION}-${PROJ}.tar ${DELIVERY}
 	${COMPRESS} ${TEAM}-${VERSION}-${PROJ}.tar
 
 .o:
